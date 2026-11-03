@@ -19,10 +19,12 @@ ENEMY_HP = 3
 MY_ATTACK = 1
 BEAM_ATTACK = 1
 BOMB_ATTACK = 1
+HORSE_ATTACK = 1
 ENEMY_ATTACK = 1
 EXP_REWARD = 1
 COIN_REWARD = 1
 CONTACT_DAMAGE_INTERVAL = 500
+HORSE_DAMAGE_INTERVAL = 500
 
 
 def load_image(path: str, size: tuple[int, int]) -> pg.Surface:
@@ -63,12 +65,7 @@ def create_egg(
 
 class Beam(pg.sprite.Sprite):
     """片柳ビーム攻撃のクラス。"""
-    def __init__(
-        self,
-        image: pg.Surface,
-        position: tuple[int, int],
-        direction: tuple[float, float],
-    ) -> None:
+    def __init__(self,image: pg.Surface, position: tuple[int, int], direction: tuple[float, float]) -> None:
         super().__init__()
         # 画像の向きを、こうかとんが向いている方向に合わせる
         angle = math.degrees(math.atan2(-direction[1], direction[0]))
@@ -85,13 +82,8 @@ class Beam(pg.sprite.Sprite):
         self.rect.move_ip(round(self.velocity[0]), round(self.velocity[1]))
 
 class bomb(pg.sprite.Sprite):
-    """爆弾のクラス。"""
-    def __init__(
-        self,
-        image: pg.Surface,
-        position: tuple[int, int],
-        direction: tuple[float, float],
-    ) -> None:
+    """ノートパソコン爆弾のクラス。"""
+    def __init__(self,image: pg.Surface, position: tuple[int, int], direction: tuple[float, float],) -> None:
         super().__init__()
         angle = math.degrees(math.atan2(-direction[1], direction[0]))
         self.image = pg.transform.rotate(image, angle)
@@ -105,17 +97,56 @@ class bomb(pg.sprite.Sprite):
     def update(self) -> None:
         """爆弾を発射方向へ移動させる。"""
         self.rect.move_ip(round(self.velocity[0]), round(self.velocity[1]))
-        self.rect = self.image.get_rect(center=position)
-        length = math.hypot(*direction) or 1
-        self.velocity = (direction[0] / length * BEAM_SPEED,direction[1] / length * BEAM_SPEED,)
+
+class Explosion(pg.sprite.Sprite):
+    """
+    爆発に関するクラス
+    """
+    def __init__(self, bomb: bomb, life: int):
+        """
+        爆弾が爆発するエフェクトを生成する
+        引数1 bomb：爆発するBombまたは敵機インスタンス
+        引数2 life：爆発時間
+        """
+        super().__init__()
+        img = pg.image.load(f"fig/effect.png")
+        self.imgs = [img, pg.transform.flip(img, 1, 1)]
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=bomb.rect.center)
+        self.life = life
+
+    def update(self):
+        """
+        爆発時間を1減算した爆発経過時間_lifeに応じて爆発画像を切り替えることで
+        爆発エフェクトを表現する
+        """
+        self.life -= 1
+        self.image = self.imgs[self.life//10%2]
+        if self.life < 0:
+            self.kill()
 
 
 class horse(pg.sprite.Sprite):
     """馬のクラス。"""
-    def __init__(self, image: pg.Surface, position: tuple[int, int]) -> None:
+    def __init__(
+        self,
+        image: pg.Surface,
+        position: tuple[int, int],
+        radius: float = 100,
+    ) -> None:
         super().__init__()
         self.image = image
         self.rect = self.image.get_rect(center=position)
+        self.radius = radius
+        self.angle = 0.0
+
+    def update(self, center: tuple[int, int]) -> None:
+        """こうかとんを中心に馬を円周上で移動させる。"""
+        self.angle = (self.angle + 0.08) % (2 * math.pi)
+        self.rect.center = (
+            round(center[0] + math.cos(self.angle) * self.radius),
+            round(center[1] + math.sin(self.angle) * self.radius),
+        )
 
 def main() -> None:
     pg.display.set_caption("こうかとんサバイバー")
@@ -129,7 +160,7 @@ def main() -> None:
     # キャラクター画像と初期位置を用意する
     player_image = load_image("fig/こうかとん.png", (72, 72))
     student_image = make_student()
-    beam_image = load_image("fig/beam_katayanagi.png", (180, 44))
+    beam_image = load_image("fig/katayanagi_beam.png", (180, 44))
     bomb_image = load_image("fig/notepc.png", (56, 56))
     uma_image = load_image("fig/uma.png", (72, 72))
     player_rect = player_image.get_rect(center=(WIDTH // 2, HEIGHT // 2))
@@ -143,11 +174,13 @@ def main() -> None:
     exp = 0
     coin = 0
     last_contact_damage = -CONTACT_DAMAGE_INTERVAL
+    last_horse_damage = -HORSE_DAMAGE_INTERVAL
 
     # 発射中の卵をSurface、位置、速度の組として管理する
     eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     beams: list[Beam] = []
     bombs: list[bomb] = []
+    horses: list[horse] = []
     clock = pg.time.Clock()
 
     while True:
@@ -157,10 +190,12 @@ def main() -> None:
                 return
             if event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
                 eggs.append(create_egg(player_rect.center, facing))
-            if event.type == pg.KEYDOWN and event.key == pg.K_b:
+            if event.type == pg.KEYDOWN and event.key == pg.K_o:
                 beams.append(Beam(beam_image, player_rect.center, facing))
-            if event.type == pg.KEYDOWN and event.key == pg.K_n:
+            if event.type == pg.KEYDOWN and event.key == pg.K_i:
                 bombs.append(bomb(bomb_image, player_rect.center, facing))
+            if event.type == pg.KEYDOWN and event.key == pg.K_u and not horses:
+                horses.append(horse(uma_image, player_rect.center))
 
         # W/A/S/Dキーの入力から移動方向を作る
         movement = pg.Vector2(0, 0)
@@ -240,6 +275,21 @@ def main() -> None:
                 updated_bombs.append(bomb_item)
         bombs = updated_bombs
 
+        # Uキーで呼び出した馬を、こうかとんの周囲で回転させる
+        for horse_item in horses:
+            horse_item.update(player_rect.center)
+        if enemy_alive and any(
+            horse_item.rect.colliderect(enemy_rect) for horse_item in horses
+        ):
+            now = pg.time.get_ticks()
+            if now - last_horse_damage >= HORSE_DAMAGE_INTERVAL:
+                enemy_hp -= HORSE_ATTACK
+                last_horse_damage = now
+                if enemy_hp <= 0:
+                    enemy_alive = False
+                    exp += EXP_REWARD
+                    coin += COIN_REWARD
+
         # 背景、敵、こうかとん、卵の順番で画面に描画する
         screen.blit(background, (0, 0))
         if enemy_alive:
@@ -251,6 +301,8 @@ def main() -> None:
             screen.blit(beam.image, beam.rect)
         for bomb_item in bombs:
             screen.blit(bomb_item.image, bomb_item.rect)
+        for horse_item in horses:
+            screen.blit(horse_item.image, horse_item.rect)
         pg.display.flip()
         clock.tick(60)
 
