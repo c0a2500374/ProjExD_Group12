@@ -184,7 +184,7 @@ def main() -> None:
     clock = pg.time.Clock()
 
     while True:
-        # 終了操作とスペースキーによる卵の発射を処理する
+        # 終了操作とスペースキーによる攻撃を処理する
         for event in pg.event.get():
             if event.type == pg.QUIT:
                 return
