@@ -15,14 +15,8 @@ EGG_SPEED = 8
 
 def load_image(path: str, size: tuple[int, int]) -> pg.Surface:
     """画像を読み込み、ゲーム画面に合う大きさへ縮小する。"""
-    try:
-        image = pg.image.load(path).convert_alpha()
-        return pg.transform.smoothscale(image, size)
-    except pg.error:
-        # 画像がない場合のプレースホルダー生成
-        surf = pg.Surface(size, pg.SRCALPHA)
-        surf.fill((200, 200, 200))
-        return surf
+    image = pg.image.load(path).convert_alpha()
+    return pg.transform.smoothscale(image, size)
 
 
 def make_student() -> pg.Surface:
@@ -32,6 +26,7 @@ def make_student() -> pg.Surface:
 
 def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tuple[pg.Surface, pg.Rect, tuple[float, float]]:
     """こうかとんの向いている方向へ進む卵を生成する。"""
+    # 卵の見た目をSurfaceに描画する
     egg = pg.Surface((18, 24), pg.SRCALPHA)
     pg.draw.ellipse(egg, (255, 250, 220), egg.get_rect())
     pg.draw.ellipse(egg, (180, 140, 80), egg.get_rect(), 2)
@@ -51,11 +46,14 @@ class Status:
     def __init__(self):
         self.max_hp = 1.0
         self.hp = 1.0
-        self.coin = 100  # テスト用初期コイン
+        self.coin = 1000000000  # テスト用初期コイン
 
         # 各項目の強化レベル
         self.speed_level = 0
         self.hp_upgrade_level = 0
+
+        # 各項目の上限回数を設定
+        self.max_hp_upgrade_level = 30
 
     def get_player_speed(self) -> float:
         """
@@ -69,7 +67,7 @@ def draw_ui(screen: pg.Surface, font: pg.font.Font, stats: Status) -> None:
     画面左上にHP,コインを描画する
     """
     # レベル・HP・コイン表示
-    info_text = f"GPA: {stats.hp}/{stats.max_hp}  COINS: {stats.coin}G"
+    info_text = f"GPA: {stats.hp:1f}/{stats.max_hp:.1f}  COINS: {stats.coin}G"
     txt_surf = font.render(info_text, True, (255, 255, 255))
     screen.blit(txt_surf, (20, 15))
 
@@ -104,7 +102,7 @@ def open_shop(screen: pg.Surface, clock: pg.time.Clock, font: pg.font.Font, stat
                     stats.speed_level += 1
 
                 # [2] 最大HP UP
-                elif event.key == pg.K_2 and stats.coin >= cost_hp:
+                elif event.key == pg.K_2 and stats.coin >= cost_hp and stats.hp_upgrade_level < stats.max_hp_upgrade_level:
                     stats.coin -= cost_hp
                     stats.hp_upgrade_level += 1
                     stats.max_hp += 0.1
@@ -116,15 +114,20 @@ def open_shop(screen: pg.Surface, clock: pg.time.Clock, font: pg.font.Font, stat
         screen.blit(overlay, (0, 0))
 
         # UI描画
-        title_surf = font.render("GAKUSYOKU : Bkey -> close", True, (255, 215, 0))
-        screen.blit(title_surf, (WIDTH // 2 - title_surf.get_width() // 2, 70))
+        title_surface = font.render("GAKUSYOKU : Bkey -> close", True, (255, 215, 0))
+        screen.blit(title_surface, (WIDTH // 2 - title_surface.get_width() // 2, 70))
 
-        info_surf = font.render(f"myCoin: {stats.coin} Coin  |  HP: {stats.hp}/{stats.max_hp}", True, (255, 255, 255))
-        screen.blit(info_surf, (WIDTH // 2 - info_surf.get_width() // 2, 130))
+        info_surface = font.render(f"myCoin: {stats.coin} Coin  |  HP: {stats.hp:.1f}/{stats.max_hp:.1f}", True, (255, 255, 255))
+        screen.blit(info_surface, (WIDTH // 2 - info_surface.get_width() // 2, 130))
+
+        if stats.max_hp_upgrade_level <= stats.hp_upgrade_level:
+            hp_cost_text = "MAX"
+        else:
+            hp_cost_text = f"{cost_hp} Coin"
 
         items = [
             f"[1] speedUP  (Lv.{stats.speed_level})  : {cost_speed} Coin",
-            f"[2] maxhpUP  (Lv.{stats.hp_upgrade_level})  : {cost_hp} Coin",
+            f"[2] maxhpUP  (Lv.{stats.hp_upgrade_level}/{stats.max_hp_upgrade_level})  : {hp_cost_text}",
         ]
 
         for i, text in enumerate(items):
@@ -133,8 +136,8 @@ def open_shop(screen: pg.Surface, clock: pg.time.Clock, font: pg.font.Font, stat
                (i == 1 and stats.coin < cost_hp)):
                 color = (120, 120, 120)
 
-            item_surf = font.render(text, True, color)
-            screen.blit(item_surf, (WIDTH // 2 - 200, 220 + i * 55))
+            item_surface = font.render(text, True, color)
+            screen.blit(item_surface, (WIDTH // 2 - 200, 220 + i * 55))
 
         pg.display.flip()
         clock.tick(60)
@@ -147,7 +150,7 @@ def main() -> None:
     font = pg.font.SysFont("arial", 26)
 
     background = pg.transform.smoothscale(
-        load_image("fig/背景.png", (WIDTH, HEIGHT)), (WIDTH, HEIGHT)
+        pg.image.load("fig/背景.png").convert(), (WIDTH, HEIGHT)
     )
 
     player_image = load_image("fig/こうかとん.png", (72, 72))
@@ -188,31 +191,33 @@ def main() -> None:
             movement.x += speed
         if movement.length_squared():
             movement.scale_to_length(speed)
+            # 移動した方向を、こうかとんが向いている方向として記録する
             facing = (movement.x, movement.y)
         player_rect.move_ip(round(movement.x), round(movement.y))
+        # こうかとんが画面外へ出ないように位置を制限する
         player_rect.clamp_ip(screen.get_rect())
 
-        # 敵移動
+        # 生徒が生存している間だけ、こうかとんへ近づける
         if enemy_alive:
             direction = pg.Vector2(player_rect.center) - pg.Vector2(enemy_rect.center)
             if direction.length_squared():
                 direction.scale_to_length(ENEMY_SPEED)
                 enemy_rect.move_ip(round(direction.x), round(direction.y))
 
-        # 弾更新と当たり判定
+        # 卵を移動し、敵への命中または画面外への移動を確認する
         updated_eggs = []
         for egg, egg_rect, velocity in eggs:
             egg_rect.move_ip(round(velocity[0]), round(velocity[1]))
             if enemy_alive and egg_rect.colliderect(enemy_rect):
+                # 命中した生徒を消し、命中した卵も削除する
                 enemy_alive = False
-                # 敵撃破時の報酬
                 stats.coin += 20     # コイン獲得
                 continue
             if screen.get_rect().colliderect(egg_rect):
                 updated_eggs.append((egg, egg_rect, velocity))
         eggs = updated_eggs
 
-        # 描画
+        # 背景、敵、こうかとん、卵の順番で画面に描画する
         screen.blit(background, (0, 0))
         if enemy_alive:
             screen.blit(student_image, enemy_rect)
