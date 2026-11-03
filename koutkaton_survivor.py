@@ -40,6 +40,8 @@ def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tup
     return egg, rect, velocity
 
 
+
+
 def main() -> None:
     pg.display.set_caption("こうかとんサバイバー")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
