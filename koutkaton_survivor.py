@@ -1,4 +1,5 @@
 import math
+from abc import ABC, abstractmethod
 import os
 import sys
 import pygame as pg
@@ -23,6 +24,109 @@ def load_image(path: str, size: tuple[int, int]) -> pg.Surface:
 def make_student() -> pg.Surface:
     """敵の生徒画像を読み込む。"""
     return load_image("fig/生徒.png", (52, 72))
+
+
+class enemy(pg.sprite.Sprite,ABC):
+    """敵を管理する抽象クラス。"""
+    def __init__(self,x,y,hp,img):
+        super().__init__()
+
+        self.hp = hp
+        self.image = img
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def move(self, player_rect: pg.Rect) -> None:
+        """主人公の位置に向かって移動する。"""
+        direction = pg.Vector2(player_rect.center) - pg.Vector2(self.rect.center)
+        if direction.length_squared():
+            direction.scale_to_length(ENEMY_SPEED)
+            self.rect.move_ip(round(direction.x), round(direction.y))
+
+    def damage(self, amount: int) -> None:
+        """敵のHPを減らす。"""
+        self.hp -= amount
+        if self.hp <= 0:
+            self.kill()
+
+    @abstractmethod
+    def update(self, player_rect: pg.Rect) -> None:
+        pass
+
+
+class nomal_enemy(enemy):
+    """敵の生徒を管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/生徒.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 72))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class yanki_enemy(enemy):
+    """敵のヤンキーを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/yanki-.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class kamathu_enemy(enemy):
+    """敵の蒲田マスコットを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/kamathu2.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+class pathi_enemy(enemy):
+    """敵の工学院マスコットを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/pathi.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class pfas_enemy(enemy):
+    """敵のPFASを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 10000000000000000):
+        img = pg.image.load("fig/PFAS.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (200, 200))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+   
+    
 
 
 def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tuple[pg.Surface, pg.Rect, tuple[float, float]]:
@@ -51,9 +155,11 @@ def main() -> None:
 
     # キャラクター画像と初期位置を用意する
     player_image = load_image("fig/こうかとん.png", (72, 72))
-    student_image = make_student()
+    enemys = pg.sprite.Group()
+    enemys.add(pfas_enemy(WIDTH - 150, HEIGHT // 2))
     player_rect = player_image.get_rect(center=(WIDTH // 2, HEIGHT // 2))
-    enemy_rect = student_image.get_rect(center=(WIDTH - 150, HEIGHT // 2))
+    enemy = pfas_enemy(WIDTH - 150, HEIGHT // 2)
+    enemy_rect = enemy.rect
     enemy_alive = True
     facing = (1.0, 0.0)
 
@@ -110,7 +216,7 @@ def main() -> None:
         # 背景、敵、こうかとん、卵の順番で画面に描画する
         screen.blit(background, (0, 0))
         if enemy_alive:
-            screen.blit(student_image, enemy_rect)
+            screen.blit(enemy.image, enemy_rect)
         screen.blit(player_image, player_rect)
         for egg, egg_rect, _ in eggs:
             screen.blit(egg, egg_rect)
