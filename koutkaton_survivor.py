@@ -1,4 +1,5 @@
 import math
+import random
 import os
 import sys
 import pygame as pg
@@ -40,9 +41,66 @@ def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tup
     return egg, rect, velocity
 
 
+# class Status:
+#     """
+#     こうかとんのHP・所持コインを管理するクラス
+#     """
+#     def __init__(self):
+#         self.max_hp = 10
+#         self.hp = 10
+#         self.coin = 100
+
+#アイテム機能の実装
+#1GPAは体力（hp）回復、金のトイレはお金(coin)を増やす
+class Items:
+    """
+    2種類のアイテムの出現
+    """
+
+    def __init__(self, kind, image_path, screen_size):
+        self.kind = kind  
+        self.min_interval = 4000  #アイテムが次に出現する時間
+        self.max_interval = 8000  
+        self.screen_width, self.screen_height = screen_size
+        self.image = pg.image.load(image_path).convert_alpha()
+        self.image = pg.transform.scale(self.image, (48, 48))
+        self.rect = self.image.get_rect()
+        self.active = False
+        self.next_spawn = self._next_spawn_time()
+
+    def _next_spawn_time(self):
+        return pg.time.get_ticks() + random.randint(self.min_interval, self.max_interval)
+
+    def update(self, player_rect, status):
+        now = pg.time.get_ticks()
+
+        if not self.active and now >= self.next_spawn:
+            self.rect.x = random.randint(0, max(0, self.screen_width - self.rect.width))
+            self.rect.y = random.randint(0, max(0, self.screen_height - self.rect.height))
+            self.active = True
+
+        if self.active and self.rect.colliderect(player_rect):
+            self.active = False # 取得したら消える。
+            self.next_spawn = self._next_spawn_time()
+        
+            if self.kind == "coin": # 金のトイレを取得したとき
+                status.coin += 10
+                #print(f"金のトイレ取得！ 現在のコイン：{status.coin}")
+            elif self.kind == "hp": # 1GPAを取得したとき
+                status.hp += 1
+                #print(f"1GPA取得！ 現在のGPA：{status.hp}")
+            
+            
+
+    def draw(self, screen):
+        if self.active:
+            screen.blit(self.image, self.rect)
+
 
 
 def main() -> None:
+    # status=Status()
+
     pg.display.set_caption("こうかとんサバイバー")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
 
@@ -63,6 +121,8 @@ def main() -> None:
     eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     clock = pg.time.Clock()
 
+    items = [Items("hp", "fig/1GPA.png", (WIDTH, HEIGHT)),Items("coin", "fig/金のトイレ.png", (WIDTH, HEIGHT)),]
+    
     while True:
         # 終了操作とスペースキーによる卵の発射を処理する
         for event in pg.event.get():
@@ -109,6 +169,9 @@ def main() -> None:
                 updated_eggs.append((egg, egg_rect, velocity))
         eggs = updated_eggs
 
+        for item in items:
+            item.update(player_rect, status)
+
         # 背景、敵、こうかとん、卵の順番で画面に描画する
         screen.blit(background, (0, 0))
         if enemy_alive:
@@ -116,6 +179,9 @@ def main() -> None:
         screen.blit(player_image, player_rect)
         for egg, egg_rect, _ in eggs:
             screen.blit(egg, egg_rect)
+
+        for item in items:
+            item.draw(screen)
         pg.display.flip()
         clock.tick(60)
 
