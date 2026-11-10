@@ -48,8 +48,9 @@ class Items:
     2種類のアイテムの出現
     """
 
-    def __init__(self, kind, image_path, screen_size):
+    def __init__(self, kind, image_path, screen_size, pickup_sound):
         self.kind = kind  
+        self.pickup_sound = pickup_sound #効果音
         self.min_interval = 4000  #アイテムが次に出現する時間
         self.max_interval = 15000  
         self.screen_width, self.screen_height = screen_size
@@ -73,6 +74,7 @@ class Items:
         if self.active and self.rect.colliderect(player_rect):
             self.active = False # 取得したら消える。
             self.next_spawn = self._next_spawn_time()
+            self.pickup_sound.play()  # 拾った瞬間に1回だけ鳴る
         
             if self.kind == "coin": # 金のトイレを取得したとき
                 status.coin += 10
@@ -107,8 +109,7 @@ def main() -> None:
     # 発射中の卵をSurface、位置、速度の組として管理する
     eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     clock = pg.time.Clock()
-
-    items = [Items("hp", "fig/1GPA.png", (WIDTH, HEIGHT)),Items("coin", "fig/金のトイレ.png", (WIDTH, HEIGHT)),]
+    items = [Items("hp", "fig/1GPA.png", (WIDTH, HEIGHT), pickup_sound),Items("coin", "fig/金のトイレ.png", (WIDTH, HEIGHT), pickup_sound),]
     
     while True:
         # 終了操作とスペースキーによる卵の発射を処理する
