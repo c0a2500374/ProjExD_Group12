@@ -41,15 +41,6 @@ def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tup
     return egg, rect, velocity
 
 
-# class Status:
-#     """
-#     こうかとんのHP・所持コインを管理するクラス
-#     """
-#     def __init__(self):
-#         self.max_hp = 10
-#         self.hp = 10
-#         self.coin = 100
-
 #アイテム機能の実装
 #1GPAは体力（hp）回復、金のトイレはお金(coin)を増やす
 class Items:
@@ -60,7 +51,7 @@ class Items:
     def __init__(self, kind, image_path, screen_size):
         self.kind = kind  
         self.min_interval = 4000  #アイテムが次に出現する時間
-        self.max_interval = 8000  
+        self.max_interval = 15000  
         self.screen_width, self.screen_height = screen_size
         self.image = pg.image.load(image_path).convert_alpha()
         self.image = pg.transform.scale(self.image, (48, 48))
@@ -88,9 +79,7 @@ class Items:
                 #print(f"金のトイレ取得！ 現在のコイン：{status.coin}")
             elif self.kind == "hp": # 1GPAを取得したとき
                 status.hp += 1
-                #print(f"1GPA取得！ 現在のGPA：{status.hp}")
-            
-            
+                #print(f"1GPA取得！ 現在のGPA：{status.hp}")  
 
     def draw(self, screen):
         if self.active:
@@ -99,8 +88,6 @@ class Items:
 
 
 def main() -> None:
-    # status=Status()
-
     pg.display.set_caption("こうかとんサバイバー")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
 
