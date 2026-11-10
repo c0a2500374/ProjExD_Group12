@@ -428,8 +428,8 @@ class Items:
     def __init__(self, kind, image_path, screen_size, pickup_sound):
         self.kind = kind  
         self.pickup_sound = pickup_sound #効果音
-        self.min_interval = 4000  #アイテムが次に出現する時間
-        self.max_interval = 8000  
+        self.min_interval = 40000  #アイテムが次に出現する時間
+        self.max_interval = 120000  
         self.screen_width, self.screen_height = screen_size
         self.image = pg.image.load(image_path).convert_alpha()
         self.image = pg.transform.scale(self.image, (48, 48))
