@@ -12,6 +12,7 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 WIDTH, HEIGHT = 1100, 650
 WORLD_WIDTH, WORLD_HEIGHT = WIDTH * 2, HEIGHT * 2
 SCREEN_RECT = pg.Rect(0, 0, WIDTH, HEIGHT)  # 画面全体の四角形(画面外判定で使う)
+WORLD_RECT = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)  # ワールド全体の四角形(画面外判定で使う)
 PLAYER_SPEED = 5
 ENEMY_SPEED = 1.5
 EGG_FIRE_INTERVAL = 500
@@ -173,7 +174,7 @@ class Player(pg.sprite.Sprite):
             self.muki = (movement.x, movement.y)
         self.rect.move_ip(round(movement.x), round(movement.y))
         # こうかとんが画面外へ出ないように位置を制限する
-        self.rect.clamp_ip(SCREEN_RECT)
+        self.rect.clamp_ip(WORLD_RECT)
 
 
 class Enemy(pg.sprite.Sprite):
@@ -570,7 +571,10 @@ class Items:
                 status.coin += 10
                 #print(f"金のトイレ取得！ 現在のコイン：{status.coin}")
             elif self.kind == "hp": # 1GPAを取得したとき
-                status.hp += 1.0
+                if status.hp < status.max_hp:
+                    status.hp += 1.0
+                elif status.hp >= status.max_hp:
+                    status.hp = status.max_hp
                 #print(f"1GPA取得！ 現在のGPA：{status.hp}")  
 
     def draw(self, screen):
@@ -604,20 +608,16 @@ def main() -> None:
     uma_image = load_image("fig/uma.png", (72, 72))
 
     # プレイヤーと、種類ごとのスプライトグループを作る
-    player = Player(player_image, (WIDTH // 2, HEIGHT // 2))
-    enemies = pg.sprite.Group(Enemy(student_image, (WIDTH - 150, HEIGHT // 2)))
+    player = Player(player_image, (WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
+    enemies = pg.sprite.Group()
     eggs = pg.sprite.Group()
     beams = pg.sprite.Group()
     bombs = pg.sprite.Group()
     explosions = pg.sprite.Group()
     horses = pg.sprite.Group()
+    player_rect = player_image.get_rect(center=(WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
 
     last_egg_fire = -EGG_FIRE_INTERVAL
-    player_rect = player_image.get_rect(center=(WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
-    enemy_rect = student_image.get_rect(center=(WORLD_WIDTH - 150, WORLD_HEIGHT // 2))
-    enemy_alive = True
-    facing = (1.0, 0.0)
-
     #　カウント機能を初期化する
     clock = pg.time.Clock()
     start_time = 0
@@ -703,8 +703,8 @@ def main() -> None:
         horses.update(player.rect.center)
 
         # カメラ位置
-        camera_x = min(max(player_rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
-        camera_y = min(max(player_rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
+        camera_x = min(max(player.rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
+        camera_y = min(max(player.rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
 
         # 背景 → 敵 → こうかとん → 攻撃 の順に、1フレームにつき1回だけ描く
         screen.blit(background, (-camera_x, -camera_y))
