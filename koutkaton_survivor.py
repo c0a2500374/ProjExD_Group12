@@ -24,19 +24,205 @@ def make_student() -> pg.Surface:
     return load_image("fig/生徒.png", (52, 72))
 
 
-def create_egg(position: tuple[int, int], direction: tuple[float, float]) -> tuple[pg.Surface, pg.Rect, tuple[float, float]]:
-    """こうかとんの向いている方向へ進む卵を生成する。"""
-    # 卵の見た目をSurfaceに描画する
-    egg = pg.Surface((18, 24), pg.SRCALPHA)
-    pg.draw.ellipse(egg, (255, 250, 220), egg.get_rect())
-    pg.draw.ellipse(egg, (180, 140, 80), egg.get_rect(), 2)
+class Player(pg.sprite.Sprite):
+    """キーボードで操作するこうかとんを表すスプライト。"""
 
-    # 向いている方向を正規化し、卵の速度を一定にする
-    dx, dy = direction
-    distance = math.hypot(dx, dy) or 1
-    velocity = (dx / distance * EGG_SPEED, dy / distance * EGG_SPEED)
-    rect = egg.get_rect(center=position)
-    return egg, rect, velocity
+    def __init__(self, image: pg.Surface, basyo: tuple[int, int]) -> None:
+        """
+        画像と初期位置を受け取り、プレイヤーを作成する。
+        引数1: 画像のSurface
+        引数2: 初期位置の(x, y)座標
+        """
+        super().__init__()
+        self.image: pg.Surface = image
+        self.rect: pg.Rect = self.image.get_rect(center=basyo)
+        self.muki: tuple[float, float] = (1.0, 0.0)  # 向いている方向(最初は右)
+        self.speed: int = 5  # 1フレームに移動する距離
+
+    def update(self, keys: pg.key.ScancodeWrapper) -> None:
+        """
+        W/A/S/Dキーに合わせて移動し、最後に移動した向きを記録する。
+        引数1: キーの押下状態を表すScancodeWrapper
+        """
+        movement = pg.Vector2(0, 0)
+        if keys[pg.K_w]:
+            movement.y -= self.speed
+        if keys[pg.K_s]:
+            movement.y += self.speed
+        if keys[pg.K_a]:
+            movement.x -= self.speed
+        if keys[pg.K_d]:
+            movement.x += self.speed
+        if movement.length_squared():
+            movement.scale_to_length(self.speed)
+            # 移動した方向を、こうかとんが向いている方向として記録する
+            self.muki = (movement.x, movement.y)
+        self.rect.move_ip(round(movement.x), round(movement.y))
+        # こうかとんが画面外へ出ないように位置を制限する
+        self.rect.clamp_ip(SCREEN_RECT)
+
+
+class Enemy(pg.sprite.Sprite):
+    """プレイヤーを追いかける敵の生徒を表すスプライト。"""
+
+    def __init__(self, image: pg.Surface, basyo: tuple[int, int]) -> None:
+        """
+        画像と初期位置を受け取り、敵を作成する。
+        引数1: 画像のSurface
+        引数2: 初期位置の(x, y)座標
+        """
+        super().__init__()
+        self.image: pg.Surface = image
+        self.rect: pg.Rect = self.image.get_rect(center=basyo)
+        self.speed: float = 1.5  # 1フレームに移動する距離
+
+    def update(self, target: tuple[int, int]) -> None:
+        """
+        目標の中心座標へ向かって少しずつ移動する。
+        """
+        houkou = pg.Vector2(target) - pg.Vector2(self.rect.center)
+        if houkou.length_squared():
+            houkou.scale_to_length(self.speed)
+            self.rect.move_ip(round(houkou.x), round(houkou.y))
+
+
+class Egg(pg.sprite.Sprite):
+    """こうかとんが発射し、敵に当たると消える卵を表すスプライト。"""
+
+    def __init__(self, basyo: tuple[int, int], houkou: tuple[float, float]) -> None:
+        """
+        発射位置と方向から卵を作成する。
+        引数1: 発射位置の(x, y)座標
+        引数2: 発射方向の(x, y)ベクトル
+        """
+        super().__init__()
+        self.image: pg.Surface = pg.Surface((18, 24), pg.SRCALPHA)
+        pg.draw.ellipse(self.image, (255, 250, 220), self.image.get_rect())
+        pg.draw.ellipse(self.image, (180, 140, 80), self.image.get_rect(), 2)
+        self.rect: pg.Rect = self.image.get_rect(center=basyo)
+        self.speed: int = 8  # 1フレームに飛ぶ距離
+
+        length = math.hypot(*houkou) or 1
+        self.idouryou: tuple[float, float] = (houkou[0] / length * self.speed,houkou[1] / length * self.speed,)
+
+    def update(self) -> None:
+        """卵を発射方向へ移動させ、画面外に出たら消える。"""
+        self.rect.move_ip(round(self.idouryou[0]), round(self.idouryou[1]))
+        if not SCREEN_RECT.colliderect(self.rect):
+            self.kill()
+
+
+class Beam(pg.sprite.Sprite):
+    """敵を貫通して進む片柳ビームを表すスプライト。"""
+
+    def __init__(self,image: pg.Surface,basyo: tuple[int, int],houkou: tuple[float, float],) -> None:
+        """
+        画像、発射位置、方向からビームを作成する。
+        引数1: 画像のSurface
+        引数2: 発射位置の(x, y)座標
+        引数3: 発射方向の(x, y)ベクトル
+        """
+        super().__init__()
+        # 画像の向きを、こうかとんが向いている方向に合わせる
+        angle = math.degrees(math.atan2(-houkou[1], houkou[0]))
+        self.image = pg.transform.rotate(image, angle)
+        self.rect = self.image.get_rect(center=basyo)
+        self.speed: int = 12  # 1フレームに飛ぶ距離
+        length = math.hypot(*houkou) or 1
+        self.idouryou: tuple[float, float] = (houkou[0] / length * self.speed,houkou[1] / length * self.speed,)
+
+    def update(self) -> None:
+        """
+        ビームを発射方向へ移動させ、画面外に出たら消える。
+        """
+        self.rect.move_ip(round(self.idouryou[0]), round(self.idouryou[1]))
+        if not SCREEN_RECT.colliderect(self.rect):
+            self.kill()
+
+
+class Bomb(pg.sprite.Sprite):
+    """一定距離を進むと爆発するノートパソコン爆弾を表すスプライト。"""
+
+    def __init__(self,image: pg.Surface,basyo: tuple[int, int],houkou: tuple[float, float],) -> None:
+        """
+        画像、発射位置、方向から爆弾を作成する。
+        引数1: 画像のSurface
+        引数2: 発射位置の(x, y)座標
+        引数3: 発射方向の(x, y)ベクトル
+        """
+        super().__init__()
+        angle = math.degrees(math.atan2(-houkou[1], houkou[0]))
+        self.image = pg.transform.rotate(image, angle)
+        self.rect = self.image.get_rect(center=basyo)
+        self.speed: int = 7  # 1フレームに飛ぶ距離
+        self.max_distance: int = 280  # この距離まで進むと爆発する
+        length = math.hypot(*houkou) or 1
+        self.idouryou: tuple[float, float] = (houkou[0] / length * self.speed,houkou[1] / length * self.speed,)
+        self.susundakyori: float = 0.0  # 爆弾が進んだ距離を記録
+
+    def update(self) -> None:
+        """
+        爆弾を発射方向へ移動させ、移動距離を更新する。
+        """
+        self.rect.move_ip(round(self.idouryou[0]), round(self.idouryou[1]))
+        self.susundakyori += math.hypot(*self.idouryou)
+
+    def reached_max_distance(self) -> bool:
+        """
+        爆弾が爆発する距離まで進んだかを返す。
+        """
+        return self.susundakyori >= self.max_distance
+
+
+class Explosion(pg.sprite.Sprite):
+    """爆弾が一定距離進んだときに表示する爆発エフェクト。"""
+
+    def __init__(self, bomb: Bomb) -> None:
+        """
+        爆発元の爆弾を受け取り、その位置にエフェクトを作成する。
+        引数1: 爆発元のBombスプライト
+        """
+        super().__init__()
+        img = pg.image.load("fig/effect.png").convert_alpha()
+        img = pg.transform.smoothscale(img, (128, 128))
+        img.set_colorkey((255, 255, 255))
+        self.imgs = [img, pg.transform.flip(img, 1, 1)]  # 反転画像も用意
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=bomb.rect.center)
+        self.life: int = 30  # 爆発が表示される残りフレーム数
+
+    def update(self) -> None:
+        """
+        爆発画像を切り替え、表示時間が終わったらスプライトを消す。
+        """
+        self.image = self.imgs[(self.life // 10) % 2]  # 10フレームごとに画像を切り替える
+        self.life -= 1
+        if self.life <= 0:
+            self.kill()
+
+
+class Horse(pg.sprite.Sprite):
+    """こうかとんの周囲を回り、触れた敵を消す馬を表すスプライト。"""
+
+    def __init__(self, image: pg.Surface, basyo: tuple[int, int]) -> None:
+        """
+        画像と初期位置を受け取り、馬を作成する。
+        引数1: 画像のSurface
+        引数2: 初期位置の(x, y)座標
+        """
+        super().__init__()
+        self.image = image
+        self.rect = self.image.get_rect(center=basyo)
+        self.radius: int = 100  # こうかとんからの距離
+        self.speed: float = 0.08  # 1フレームに進む角度(ラジアン)
+        self.angle: float = 0.0  # 現在の角度(ラジアン)
+
+    def update(self, center: tuple[int, int]) -> None:
+        """
+        こうかとんを中心とする円周上で馬を移動させる。
+        """
+        self.angle = (self.angle + self.speed) % (2 * math.pi)  # 角度を更新する、2πを超えたら0に戻す
+        self.rect.center = (round(center[0] + math.cos(self.angle) * self.radius),round(center[1] + math.sin(self.angle) * self.radius))  # こうかとんを中心に円周上の座標を計算する
 
 class Status:
     """
@@ -178,8 +364,6 @@ def main() -> None:
     facing = (1.0, 0.0)
     world_rect = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
-    # 発射中の卵をSurface、位置、速度の組として管理する
-    eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     clock = pg.time.Clock()
 
     while True:
@@ -201,24 +385,7 @@ def main() -> None:
 
         # 当たった卵と敵を消す
         pg.sprite.groupcollide(eggs, enemies, True, True)
-                eggs.append(create_egg(player_rect.center, facing))
 
-        # W/A/S/Dキーの入力から移動方向を作る
-        movement = pg.Vector2(0, 0)
-        keys = pg.key.get_pressed()
-        if keys[pg.K_w]:
-            movement.y -= PLAYER_SPEED
-        if keys[pg.K_s]:
-            movement.y += PLAYER_SPEED
-        if keys[pg.K_a]:
-            movement.x -= PLAYER_SPEED
-        if keys[pg.K_d]:
-            movement.x += PLAYER_SPEED
-        if movement.length_squared():
-            movement.scale_to_length(PLAYER_SPEED)
-            # 移動した方向を、こうかとんが向いている方向として記録する
-            facing = (movement.x, movement.y)
-        player_rect.move_ip(round(movement.x), round(movement.y))
         # こうかとんが背景の外へ出ないように位置を制限する
         player_rect.clamp_ip(world_rect)
 
@@ -247,8 +414,12 @@ def main() -> None:
         explosions.update()
         horses.update(player.rect.center)
 
-        # 背景、敵、こうかとん、卵…の順番で画面に描画する
-        screen.blit(background, (0, 0))
+        # カメラ位置（現状は固定）
+        camera_x = min(max(player_rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
+        camera_y = min(max(player_rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
+
+        # 背景 → 敵 → こうかとん → 攻撃 の順に、1フレームにつき1回だけ描く
+        screen.blit(background, (-camera_x, -camera_y))
         enemies.draw(screen)
         screen.blit(player.image, player.rect)
         eggs.draw(screen)
@@ -256,36 +427,7 @@ def main() -> None:
         bombs.draw(screen)
         explosions.draw(screen)
         horses.draw(screen)
-        # 生徒が生存している間だけ、こうかとんへ近づける
-        if enemy_alive:
-            direction = pg.Vector2(player_rect.center) - pg.Vector2(enemy_rect.center)
-            if direction.length_squared():
-                direction.scale_to_length(ENEMY_SPEED)
-                enemy_rect.move_ip(round(direction.x), round(direction.y))
 
-        # 卵を移動し、敵への命中または画面外への移動を確認する
-        updated_eggs = []
-        for egg, egg_rect, velocity in eggs:
-            egg_rect.move_ip(round(velocity[0]), round(velocity[1]))
-            if enemy_alive and egg_rect.colliderect(enemy_rect):
-                # 命中した生徒を消し、命中した卵も削除する
-                enemy_alive = False
-                continue
-            if world_rect.colliderect(egg_rect):
-                updated_eggs.append((egg, egg_rect, velocity))
-        eggs = updated_eggs
-
-        # こうかとんを中心に背景を動かし、背景の端でカメラを止める
-        camera_x = min(max(player_rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
-        camera_y = min(max(player_rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
-
-        # 背景、敵、こうかとん、卵の順番で画面に描画する
-        screen.blit(background, (-camera_x, -camera_y))
-        if enemy_alive:
-            screen.blit(student_image, (enemy_rect.x - camera_x, enemy_rect.y - camera_y))
-        screen.blit(player_image, (player_rect.x - camera_x, player_rect.y - camera_y))
-        for egg, egg_rect, _ in eggs:
-            screen.blit(egg, (egg_rect.x - camera_x, egg_rect.y - camera_y))
         pg.display.flip()
         clock.tick(60)
 
