@@ -26,6 +26,14 @@ def load_image(path: str, size: tuple[int, int]) -> pg.Surface:
     return pg.transform.smoothscale(image, size)
 
 
+def draw_group(screen: pg.Surface, group: pg.sprite.Group,
+               camera_x: int, camera_y: int) -> None:
+    """ワールド座標のスプライトグループをカメラ位置に合わせて描画する。"""
+    for sprite in group:
+        screen.blit(sprite.image, (sprite.rect.x - camera_x,
+                                   sprite.rect.y - camera_y))
+
+
 def make_student() -> pg.Surface:
     """敵の生徒画像を読み込む。"""
     return load_image("fig/生徒.png", (52, 72))
@@ -135,7 +143,10 @@ class pfas_enemy(enemy):
     
 def create_enemy(enemy_class, enemies) -> None:
     """敵を生成する。"""
-    new_enemy = enemy_class(random.randint(0, WIDTH), random.randint(0, HEIGHT))
+    new_enemy = enemy_class(
+        random.randint(0, WORLD_WIDTH),
+        random.randint(0, WORLD_HEIGHT),
+    )
     enemies.add(new_enemy)
    
 class Player(pg.sprite.Sprite):
@@ -223,7 +234,7 @@ class Egg(pg.sprite.Sprite):
     def update(self) -> None:
         """卵を発射方向へ移動させ、画面外に出たら消える。"""
         self.rect.move_ip(round(self.idouryou[0]), round(self.idouryou[1]))
-        if not SCREEN_RECT.colliderect(self.rect):
+        if not WORLD_RECT.colliderect(self.rect):
             self.kill()
 
 
@@ -251,7 +262,7 @@ class Beam(pg.sprite.Sprite):
         ビームを発射方向へ移動させ、画面外に出たら消える。
         """
         self.rect.move_ip(round(self.idouryou[0]), round(self.idouryou[1]))
-        if not SCREEN_RECT.colliderect(self.rect):
+        if not WORLD_RECT.colliderect(self.rect):
             self.kill()
 
 
@@ -361,12 +372,16 @@ class Status:
         """
         return 5.0 + (self.speed_level * 0.8)
 
+    def damage(self, amount: float) -> None:
+        """主人公のHPを減らす。"""
+        self.hp = max(0.0, self.hp - amount)
+
     def reset(self):
         """
         ステータスを初期値に戻す
         """
-        self.max_hp = 10
-        self.hp = 10
+        self.max_hp = 1.0
+        self.hp = 1.0
         self.coin = 0
         self.speed_level = 0
         self.hp_upgrade_level = 0
@@ -577,9 +592,10 @@ class Items:
                     status.hp = status.max_hp
                 #print(f"1GPA取得！ 現在のGPA：{status.hp}")  
 
-    def draw(self, screen):
+    def draw(self, screen, camera_x=0, camera_y=0):
         if self.active:
-            screen.blit(self.image, self.rect)
+            screen.blit(self.image, (self.rect.x - camera_x,
+                                     self.rect.y - camera_y))
 
 
 
@@ -615,8 +631,6 @@ def main() -> None:
     bombs = pg.sprite.Group()
     explosions = pg.sprite.Group()
     horses = pg.sprite.Group()
-    player_rect = player_image.get_rect(center=(WORLD_WIDTH // 2, WORLD_HEIGHT // 2))
-
     last_egg_fire = -EGG_FIRE_INTERVAL
     #　カウント機能を初期化する
     clock = pg.time.Clock()
@@ -625,12 +639,13 @@ def main() -> None:
     enemy_classes = [nomal_enemy, yanki_enemy, kamathu_enemy, pathi_enemy, pfas_enemy]
 
 
-    world_rect = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
-
     status = Status()
 
     clock = pg.time.Clock()
-    items = [Items("hp", "fig/1GPA.png", (WIDTH, HEIGHT), pickup_sound),Items("coin", "fig/金のトイレ.png", (WIDTH, HEIGHT), pickup_sound),]
+    items = [
+        Items("hp", "fig/1GPA.png", (WORLD_WIDTH, WORLD_HEIGHT), pickup_sound),
+        Items("coin", "fig/金のトイレ.png", (WORLD_WIDTH, WORLD_HEIGHT), pickup_sound),
+    ]
     
     while True:
         # 終了操作とスペースキーなどによる攻撃を処理する
@@ -665,15 +680,19 @@ def main() -> None:
             create_enemy(enemy_classes[enemy_index], enemies)
             pop_time -= 100  
 
-        # 当たった卵と敵を消す
-        if pg.sprite.groupcollide(eggs, enemies, True, True):
+        # 当たった卵と敵にダメージを与える
+        egg_hits = pg.sprite.groupcollide(eggs, enemies, True, False)
+        for hit_enemies in egg_hits.values():
+            for hit_enemy in hit_enemies:
+                hit_enemy.damage(1)
             status.coin += 20     # コイン獲得
 
         # こうかとんが背景の外へ出ないように位置を制限する
-        player_rect.clamp_ip(world_rect)
-
         # 敵は消えるが、ビームは消えず貫通する
-        if pg.sprite.groupcollide(beams, enemies, False, True):
+        beam_hits = pg.sprite.groupcollide(beams, enemies, False, False)
+        for hit_enemies in beam_hits.values():
+            for hit_enemy in hit_enemies:
+                hit_enemy.damage(1)
             status.coin += 20     # コイン獲得
 
         # 爆弾が一定距離まで進んだら爆発させる(画面外に出た爆弾は消す)
@@ -681,14 +700,20 @@ def main() -> None:
             if bomb_item.reached_max_distance():
                 explosion = Explosion(bomb_item)
                 explosions.add(explosion)
-                if pg.sprite.spritecollide(explosion, enemies, True):
+                hit_enemies = pg.sprite.spritecollide(explosion, enemies, False)
+                for hit_enemy in hit_enemies:
+                    hit_enemy.damage(1)
+                if hit_enemies:
                     status.coin += 20     # コイン獲得
                 bomb_item.kill()
-            elif not SCREEN_RECT.colliderect(bomb_item.rect):
+            elif not WORLD_RECT.colliderect(bomb_item.rect):
                 bomb_item.kill()
 
         # Uキーで呼び出した馬に触れた敵を消す
-        if pg.sprite.groupcollide(horses, enemies, False, True):
+        horse_hits = pg.sprite.groupcollide(horses, enemies, False, False)
+        for hit_enemies in horse_hits.values():
+            for hit_enemy in hit_enemies:
+                hit_enemy.damage(1)
             status.coin += 20     # コイン獲得
 
         # 全てのスプライトを動かす
@@ -702,21 +727,39 @@ def main() -> None:
         explosions.update()
         horses.update(player.rect.center)
 
+        # 主人公と敵の中心間距離が、従来の接触距離の半分以内なら双方にダメージを与える
+        player_radius = max(player.rect.width, player.rect.height) / 2
+        for hit_enemy in enemies:
+            enemy_radius = max(hit_enemy.rect.width, hit_enemy.rect.height) / 2
+            contact_distance = (player_radius + enemy_radius) / 2
+            if pg.Vector2(player.rect.center).distance_to(
+                hit_enemy.rect.center
+            ) <= contact_distance:
+                status.damage(0.1)
+                hit_enemy.damage(1)
+
+        if status.hp <= 0:
+            if not game_over_screen(screen, start_background, status):
+                return
+
         # カメラ位置
-        camera_x = min(max(player.rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
-        camera_y = min(max(player.rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
+        camera_x = min(max(player.rect.centerx - WIDTH // 2, 0),
+                       WORLD_WIDTH - WIDTH)
+        camera_y = min(max(player.rect.centery - HEIGHT // 2, 0),
+                       WORLD_HEIGHT - HEIGHT)
 
         # 背景 → 敵 → こうかとん → 攻撃 の順に、1フレームにつき1回だけ描く
         screen.blit(background, (-camera_x, -camera_y))
         for item in items:
-            item.draw(screen)
-        enemies.draw(screen)
-        screen.blit(player.image, player.rect)
-        eggs.draw(screen)
-        beams.draw(screen)
-        bombs.draw(screen)
-        explosions.draw(screen)
-        horses.draw(screen)
+            item.draw(screen, camera_x, camera_y)
+        draw_group(screen, enemies, camera_x, camera_y)
+        screen.blit(player.image, (player.rect.x - camera_x,
+                                   player.rect.y - camera_y))
+        draw_group(screen, eggs, camera_x, camera_y)
+        draw_group(screen, beams, camera_x, camera_y)
+        draw_group(screen, bombs, camera_x, camera_y)
+        draw_group(screen, explosions, camera_x, camera_y)
+        draw_group(screen, horses, camera_x, camera_y)
         draw_ui(screen, font, status)
 
         pg.display.flip()
