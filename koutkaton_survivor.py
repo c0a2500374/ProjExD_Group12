@@ -1,4 +1,5 @@
 import math
+import random
 import os
 import sys
 import pygame as pg
@@ -417,6 +418,54 @@ def game_over_screen(screen: pg.Surface, background: pg.Surface, status: "Status
         pg.display.flip()
         pg.time.Clock().tick(60)
 
+#アイテム機能の実装
+#1GPAは体力（hp）回復、金のトイレはお金(coin)を増やす
+class Items:
+    """
+    2種類のアイテムの出現
+    """
+
+    def __init__(self, kind, image_path, screen_size, pickup_sound):
+        self.kind = kind  
+        self.pickup_sound = pickup_sound #効果音
+        self.min_interval = 4000  #アイテムが次に出現する時間
+        self.max_interval = 15000  
+        self.screen_width, self.screen_height = screen_size
+        self.image = pg.image.load(image_path).convert_alpha()
+        self.image = pg.transform.scale(self.image, (48, 48))
+        self.rect = self.image.get_rect()
+        self.active = False
+        self.next_spawn = self._next_spawn_time()
+
+    def _next_spawn_time(self):
+        return pg.time.get_ticks() + random.randint(self.min_interval, self.max_interval)
+
+    def update(self, player_rect, status):
+        now = pg.time.get_ticks()
+
+        if not self.active and now >= self.next_spawn:
+            self.rect.x = random.randint(0, max(0, self.screen_width - self.rect.width))
+            self.rect.y = random.randint(0, max(0, self.screen_height - self.rect.height))
+            self.active = True
+
+        if self.active and self.rect.colliderect(player_rect):
+            self.active = False # 取得したら消える。
+            self.next_spawn = self._next_spawn_time()
+            self.pickup_sound.play()  # 拾った瞬間に1回だけ鳴る
+        
+            if self.kind == "coin": # 金のトイレを取得したとき
+                status.coin += 10
+                #print(f"金のトイレ取得！ 現在のコイン：{status.coin}")
+            elif self.kind == "hp": # 1GPAを取得したとき
+                status.hp += 1
+                #print(f"1GPA取得！ 現在のGPA：{status.hp}")  
+
+    def draw(self, screen):
+        if self.active:
+            screen.blit(self.image, self.rect)
+
+
+
 def main() -> None:
     """ゲーム画面を作成し、イベント処理と描画を繰り返す。"""
     pg.display.set_caption("こうかとんサバイバー")
@@ -460,7 +509,8 @@ def main() -> None:
     status = Status()
 
     clock = pg.time.Clock()
-
+    items = [Items("hp", "fig/1GPA.png", (WIDTH, HEIGHT), pickup_sound),Items("coin", "fig/金のトイレ.png", (WIDTH, HEIGHT), pickup_sound),]
+    
     while True:
         # 終了操作とスペースキーなどによる攻撃を処理する
         for event in pg.event.get():
