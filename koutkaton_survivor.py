@@ -3,7 +3,6 @@ import os
 import sys
 import pygame as pg
 
-
 # 画像を相対パスで読み込めるよう、実行場所をこのファイルのあるフォルダにする
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
 
@@ -364,6 +363,10 @@ def main() -> None:
     facing = (1.0, 0.0)
     world_rect = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
+    stats = Status()
+    shoot_timer = 0
+
+    eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     clock = pg.time.Clock()
 
     while True:
