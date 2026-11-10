@@ -429,7 +429,7 @@ class Items:
         self.kind = kind  
         self.pickup_sound = pickup_sound #効果音
         self.min_interval = 4000  #アイテムが次に出現する時間
-        self.max_interval = 15000  
+        self.max_interval = 8000  
         self.screen_width, self.screen_height = screen_size
         self.image = pg.image.load(image_path).convert_alpha()
         self.image = pg.transform.scale(self.image, (48, 48))
@@ -457,7 +457,7 @@ class Items:
                 status.coin += 10
                 #print(f"金のトイレ取得！ 現在のコイン：{status.coin}")
             elif self.kind == "hp": # 1GPAを取得したとき
-                status.hp += 1
+                status.hp += 1.0
                 #print(f"1GPA取得！ 現在のGPA：{status.hp}")  
 
     def draw(self, screen):
@@ -470,7 +470,7 @@ def main() -> None:
     """ゲーム画面を作成し、イベント処理と描画を繰り返す。"""
     pg.display.set_caption("こうかとんサバイバー")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
-
+    pickup_sound = pg.mixer.Sound("sound/決定ボタンを押す12.mp3")
     font = pg.font.SysFont("arial", 26)
 
     background_image = pg.image.load("fig/背景.png").convert()
@@ -559,6 +559,8 @@ def main() -> None:
 
         # 全てのスプライトを動かす
         player.update(pg.key.get_pressed(), status)
+        for item in items:
+            item.update(player.rect, status)
         enemies.update(player.rect.center)
         eggs.update()
         beams.update()
@@ -572,6 +574,8 @@ def main() -> None:
 
         # 背景 → 敵 → こうかとん → 攻撃 の順に、1フレームにつき1回だけ描く
         screen.blit(background, (-camera_x, -camera_y))
+        for item in items:
+            item.draw(screen)
         enemies.draw(screen)
         screen.blit(player.image, player.rect)
         eggs.draw(screen)
