@@ -222,7 +222,7 @@ def main() -> None:
         # 生徒が生存している間だけ、こうかとんへ近づける
         enemys.update(player_rect)
         for target in enemys:
-            if target.rect.colliderect(player_rect):
+            if target.rect.center == player_rect.center:
                 return
 
         # 卵を移動し、敵への命中または画面外への移動を確認する
@@ -231,7 +231,7 @@ def main() -> None:
             egg_rect.move_ip(round(velocity[0]), round(velocity[1]))
             hit = False
             for target in enemys:
-                if (abs(player_rect.centerx - target.rect.centerx) < 1 and abs(player_rect.centery - target.rect.centery) < 1):
+                if (abs(player_rect.centerx - target.rect.centerx) < 1 and abs(player_rect.centery - target.rect.centery) < 1 ):
                     target.damage(1)
                     hit = True
                     break
