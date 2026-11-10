@@ -3,6 +3,7 @@ import random
 import os
 import sys
 import pygame as pg
+from abc import ABC, abstractmethod
 
 # 画像を相対パスで読み込めるよう、実行場所をこのファイルのあるフォルダにする
 os.chdir(os.path.dirname(os.path.abspath(__file__)))
@@ -11,7 +12,12 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 WIDTH, HEIGHT = 1100, 650
 WORLD_WIDTH, WORLD_HEIGHT = WIDTH * 2, HEIGHT * 2
 SCREEN_RECT = pg.Rect(0, 0, WIDTH, HEIGHT)  # 画面全体の四角形(画面外判定で使う)
+PLAYER_SPEED = 5
+ENEMY_SPEED = 1.5
 EGG_FIRE_INTERVAL = 500
+ENEMY_TIME = 100
+ENEMY_CHENGE = 60000
+
 
 def load_image(path: str, size: tuple[int, int]) -> pg.Surface:
     """画像を読み込み、ゲーム画面に合う大きさへ縮小する。"""
@@ -24,6 +30,113 @@ def make_student() -> pg.Surface:
     return load_image("fig/生徒.png", (52, 72))
 
 
+class enemy(pg.sprite.Sprite,ABC):
+    """敵を管理する抽象クラス。"""
+    def __init__(self,x,y,hp,img):
+        super().__init__()
+
+        self.hp = hp # HPを設定する
+        self.image = img # 画像を設定する
+        self.rect = self.image.get_rect(center=(x, y)) # 位置を設定する
+
+    def move(self, player_rect: pg.Rect) -> None:
+        """主人公の位置に向かって移動する。"""
+        direction = pg.Vector2(player_rect.center) - pg.Vector2(self.rect.center)
+        if direction.length_squared(): # 方向ベクトルがゼロでない場合のみ移動する
+            direction.scale_to_length(ENEMY_SPEED)
+            self.rect.move_ip(round(direction.x), round(direction.y)) 
+
+    def damage(self, amount: int) -> None:
+        """敵のHPを減らす。"""
+        self.hp -= amount
+        if self.hp <= 0:
+            self.kill()
+
+    @abstractmethod
+    def update(self, player_rect: pg.Rect) -> None:
+        pass
+
+
+class nomal_enemy(enemy):
+    """敵の生徒を管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/生徒.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 72))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class yanki_enemy(enemy):
+    """敵のヤンキーを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/yanki-.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class kamathu_enemy(enemy):
+    """敵の蒲田マスコットを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/kamathu2.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class pathi_enemy(enemy):
+    """敵の工学院マスコットを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 1):
+        img = pg.image.load("fig/pathi.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (80, 80))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+
+
+class pfas_enemy(enemy):
+    """敵のPFASを管理するクラス。"""
+    def __init__(self, x: int, y: int, hp: int = 10000000000000000):# ゲームを終了させるため無敵に設定
+        img = pg.image.load("fig/PFAS.png").convert_alpha()
+        imgs = [pg.transform.scale(img, (200, 200))]
+        super().__init__(x, y, hp,img)
+        self.imgs = imgs
+        self.image = self.imgs[0]
+        self.rect = self.image.get_rect(center=(x, y))
+
+    def update(self, player_rect: pg.Rect) -> None:
+        """敵の状態を更新する。"""
+        self.move(player_rect)
+   
+    
+def create_enemy(enemy_class,enemys) -> None:
+    """敵を生成する。"""
+    new_enemy = enemy_class(random.randint(0, WIDTH), random.randint(0, HEIGHT))
+    enemys.add(new_enemy)
+   
 class Player(pg.sprite.Sprite):
     """キーボードで操作するこうかとんを表すスプライト。"""
 
@@ -504,6 +617,16 @@ def main() -> None:
     enemy_rect = student_image.get_rect(center=(WORLD_WIDTH - 150, WORLD_HEIGHT // 2))
     enemy_alive = True
     facing = (1.0, 0.0)
+
+    #　カウント機能を初期化する
+    clock = pg.time.Clock()
+    start_time = 0
+    pop_time = 0
+    # 敵のグループと敵のリストを用意する
+    enemys = pg.sprite.Group()
+    enemy_classes = [nomal_enemy, yanki_enemy, kamathu_enemy, pathi_enemy, pfas_enemy]
+
+
     world_rect = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
     status = Status()
@@ -586,7 +709,7 @@ def main() -> None:
         draw_ui(screen, font, status)
 
         pg.display.flip()
-        clock.tick(60)
+        
 
 
 if __name__ == "__main__":
