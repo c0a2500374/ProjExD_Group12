@@ -39,9 +39,9 @@ class enemy(pg.sprite.Sprite,ABC):
         self.image = img # 画像を設定する
         self.rect = self.image.get_rect(center=(x, y)) # 位置を設定する
 
-    def move(self, player_rect: pg.Rect) -> None:
+    def move(self, player_pos: tuple[int, int]) -> None:
         """主人公の位置に向かって移動する。"""
-        direction = pg.Vector2(player_rect.center) - pg.Vector2(self.rect.center)
+        direction = pg.Vector2(player_pos) - pg.Vector2(self.rect.center)
         if direction.length_squared(): # 方向ベクトルがゼロでない場合のみ移動する
             direction.scale_to_length(ENEMY_SPEED)
             self.rect.move_ip(round(direction.x), round(direction.y)) 
@@ -53,7 +53,7 @@ class enemy(pg.sprite.Sprite,ABC):
             self.kill()
 
     @abstractmethod
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         pass
 
 
@@ -67,9 +67,9 @@ class nomal_enemy(enemy):
         self.image = self.imgs[0]
         self.rect = self.image.get_rect(center=(x, y))
 
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         """敵の状態を更新する。"""
-        self.move(player_rect)
+        self.move(player_pos)
 
 
 class yanki_enemy(enemy):
@@ -82,9 +82,9 @@ class yanki_enemy(enemy):
         self.image = self.imgs[0]
         self.rect = self.image.get_rect(center=(x, y))
 
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         """敵の状態を更新する。"""
-        self.move(player_rect)
+        self.move(player_pos)
 
 
 class kamathu_enemy(enemy):
@@ -97,9 +97,9 @@ class kamathu_enemy(enemy):
         self.image = self.imgs[0]
         self.rect = self.image.get_rect(center=(x, y))
 
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         """敵の状態を更新する。"""
-        self.move(player_rect)
+        self.move(player_pos)
 
 
 class pathi_enemy(enemy):
@@ -112,9 +112,9 @@ class pathi_enemy(enemy):
         self.image = self.imgs[0]
         self.rect = self.image.get_rect(center=(x, y))
 
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         """敵の状態を更新する。"""
-        self.move(player_rect)
+        self.move(player_pos)
 
 
 class pfas_enemy(enemy):
@@ -127,15 +127,15 @@ class pfas_enemy(enemy):
         self.image = self.imgs[0]
         self.rect = self.image.get_rect(center=(x, y))
 
-    def update(self, player_rect: pg.Rect) -> None:
+    def update(self, player_pos: tuple[int, int]) -> None:
         """敵の状態を更新する。"""
-        self.move(player_rect)
+        self.move(player_pos)
    
     
-def create_enemy(enemy_class,enemys) -> None:
+def create_enemy(enemy_class, enemies) -> None:
     """敵を生成する。"""
     new_enemy = enemy_class(random.randint(0, WIDTH), random.randint(0, HEIGHT))
-    enemys.add(new_enemy)
+    enemies.add(new_enemy)
    
 class Player(pg.sprite.Sprite):
     """キーボードで操作するこうかとんを表すスプライト。"""
@@ -622,8 +622,6 @@ def main() -> None:
     clock = pg.time.Clock()
     start_time = 0
     pop_time = 0
-    # 敵のグループと敵のリストを用意する
-    enemys = pg.sprite.Group()
     enemy_classes = [nomal_enemy, yanki_enemy, kamathu_enemy, pathi_enemy, pfas_enemy]
 
 
@@ -653,6 +651,19 @@ def main() -> None:
             if event.type == pg.KEYDOWN and event.key == pg.K_b:
                 open_shop(screen, clock, font, status)
 
+        # 敵を出現させる
+        time = clock.tick(60)
+        
+        start_time += time # ゲーム開始からの経過時間を更新する
+        pop_time += time # 敵の出現までの時間を更新する
+        
+        enemy_index = start_time//60000 # 経過時間に応じて敵の種類を変える
+        if start_time >= 300000: # 5分経過後はPFASを出現させる
+            enemy_index = 4
+                
+        while pop_time >=100: # 0.1秒ごとに敵を生成する
+            create_enemy(enemy_classes[enemy_index], enemies)
+            pop_time -= 100  
 
         # 当たった卵と敵を消す
         if pg.sprite.groupcollide(eggs, enemies, True, True):
@@ -691,7 +702,7 @@ def main() -> None:
         explosions.update()
         horses.update(player.rect.center)
 
-        # カメラ位置（現状は固定）
+        # カメラ位置
         camera_x = min(max(player_rect.centerx - WIDTH // 2, 0), WORLD_WIDTH - WIDTH)
         camera_y = min(max(player_rect.centery - HEIGHT // 2, 0), WORLD_HEIGHT - HEIGHT)
 
