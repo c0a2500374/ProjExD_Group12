@@ -38,11 +38,12 @@ class Player(pg.sprite.Sprite):
         self.muki: tuple[float, float] = (1.0, 0.0)  # 向いている方向(最初は右)
         self.speed: int = 5  # 1フレームに移動する距離
 
-    def update(self, keys: pg.key.ScancodeWrapper) -> None:
+    def update(self, keys: pg.key.ScancodeWrapper, status: "Status") -> None:
         """
         W/A/S/Dキーに合わせて移動し、最後に移動した向きを記録する。
         引数1: キーの押下状態を表すScancodeWrapper
         """
+        self.speed = status.get_player_speed()
         movement = pg.Vector2(0, 0)
         if keys[pg.K_w]:
             movement.y -= self.speed
@@ -228,11 +229,23 @@ class Status:
     こうかとんのHP・所持コインを管理するクラス
     """
     def __init__(self):
-        self.max_hp = 10
-        self.hp = 10
+        self.max_hp = 1.0
+        self.hp = 1.0
         self.coin = 0
+
+        # 各項目の強化レベル
         self.speed_level = 0
         self.hp_upgrade_level = 0
+
+        # 各項目の上限回数を設定
+        self.max_hp_upgrade_level = 30
+
+    def get_player_speed(self) -> float:
+        """
+        移動速度：初期値5.0 ＋ レベルにつき0.8上昇
+        """
+        return 5.0 + (self.speed_level * 0.8)
+
     def reset(self):
         """
         ステータスを初期値に戻す
@@ -242,6 +255,15 @@ class Status:
         self.coin = 0
         self.speed_level = 0
         self.hp_upgrade_level = 0
+
+def draw_ui(screen: pg.Surface, font: pg.font.Font, status: Status) -> None:
+    """
+    画面左上にHP,コインを描画する
+    """
+    # レベル・HP・コイン表示
+    info_text = f"GPA: {status.hp:1f}/{status.max_hp:.1f}  COINS: {status.coin}G"
+    txt_surf = font.render(info_text, True, (255, 255, 255))
+    screen.blit(txt_surf, (20, 15))
 
 
 def start_screen(screen: pg.Surface, background: pg.Surface) -> bool:
@@ -282,8 +304,78 @@ def start_screen(screen: pg.Surface, background: pg.Surface) -> bool:
         pg.display.flip()
         pg.time.Clock().tick(60)
 
+def open_shop(screen: pg.Surface, clock: pg.time.Clock, font: pg.font.Font, status: Status) -> None:
+    """
+    ショップ画面（ポーズ中）の描画と入力処理
+    """
+    in_shop = True
 
-def game_over_screen(screen: pg.Surface, background: pg.Surface) -> bool:
+    prices = {
+        "speed": 30,
+        "max_hp": 50,
+    }
+
+    while in_shop:
+        cost_speed = int(prices["speed"] * (1.3 ** status.speed_level))
+        cost_hp = int(prices["max_hp"] * (1.3 ** status.hp_upgrade_level))
+
+        for event in pg.event.get():
+            if event.type == pg.QUIT:
+                pg.quit()
+                sys.exit()
+            
+            if event.type == pg.KEYDOWN:
+                if event.key in (pg.K_b, pg.K_ESCAPE):
+                    in_shop = False
+
+                # [1] 移動速度 UP
+                elif event.key == pg.K_1 and status.coin >= cost_speed:
+                    status.coin -= cost_speed
+                    status.speed_level += 1
+
+                # [2] 最大HP UP
+                elif event.key == pg.K_2 and status.coin >= cost_hp and status.hp_upgrade_level < status.max_hp_upgrade_level:
+                    status.coin -= cost_hp
+                    status.hp_upgrade_level += 1
+                    status.max_hp += 0.1
+                    status.hp += 0.1
+
+        # 背景の暗転
+        overlay = pg.Surface((WIDTH, HEIGHT), pg.SRCALPHA)
+        overlay.fill((0, 0, 0, 200))
+        screen.blit(overlay, (0, 0))
+
+        # UI描画
+        title_surface = font.render("GAKUSYOKU : Bkey -> close", True, (255, 215, 0))
+        screen.blit(title_surface, (WIDTH // 2 - title_surface.get_width() // 2, 70))
+
+        info_surface = font.render(f"myCoin: {status.coin} Coin  |  HP: {status.hp:.1f}/{status.max_hp:.1f}", True, (255, 255, 255))
+        screen.blit(info_surface, (WIDTH // 2 - info_surface.get_width() // 2, 130))
+
+        if status.max_hp_upgrade_level <= status.hp_upgrade_level:
+            hp_cost_text = "MAX"
+        else:
+            hp_cost_text = f"{cost_hp} Coin"
+
+        items = [
+            f"[1] speedUP  (Lv.{status.speed_level})  : {cost_speed} Coin",
+            f"[2] maxhpUP  (Lv.{status.hp_upgrade_level}/{status.max_hp_upgrade_level})  : {hp_cost_text}",
+        ]
+
+        for i, text in enumerate(items):
+            color = (255, 255, 255)
+            if ((i == 0 and status.coin < cost_speed) or
+               (i == 1 and status.coin < cost_hp)):
+                color = (120, 120, 120)
+
+            item_surface = font.render(text, True, color)
+            screen.blit(item_surface, (WIDTH // 2 - 200, 220 + i * 55))
+
+        pg.display.flip()
+        clock.tick(60)
+
+
+def game_over_screen(screen: pg.Surface, background: pg.Surface, status: "Status") -> bool:
     """
     ゲームオーバー画面を表示するクラス
     こうかとんのHPが0になったときに表示される。
@@ -312,7 +404,7 @@ def game_over_screen(screen: pg.Surface, background: pg.Surface) -> bool:
             if event.type == pg.MOUSEBUTTONDOWN and event.button == 1 and exit_rect.collidepoint(event.pos):
                 return False
             if event.type == pg.MOUSEBUTTONDOWN and event.button == 1 and restart_rect.collidepoint(event.pos):
-                Status.reset()
+                status.reset()
                 return True
         # 画面に背景とボタン用の四角（角が丸い）を描画する
         screen.blit(background, (0, 0))
@@ -329,6 +421,8 @@ def main() -> None:
     """ゲーム画面を作成し、イベント処理と描画を繰り返す。"""
     pg.display.set_caption("こうかとんサバイバー")
     screen = pg.display.set_mode((WIDTH, HEIGHT))
+
+    font = pg.font.SysFont("arial", 26)
 
     background_image = pg.image.load("fig/背景.png").convert()
     start_background = pg.transform.smoothscale(background_image, (WIDTH, HEIGHT))
@@ -363,10 +457,8 @@ def main() -> None:
     facing = (1.0, 0.0)
     world_rect = pg.Rect(0, 0, WORLD_WIDTH, WORLD_HEIGHT)
 
-    stats = Status()
-    shoot_timer = 0
+    status = Status()
 
-    eggs: list[tuple[pg.Surface, pg.Rect, tuple[float, float]]] = []
     clock = pg.time.Clock()
 
     while True:
@@ -385,31 +477,38 @@ def main() -> None:
                 bombs.add(Bomb(bomb_image, player.rect.center, player.muki))
             if event.type == pg.KEYDOWN and event.key == pg.K_u and not horses:  # Uキーで馬を呼び出す(馬がいない時だけ)
                 horses.add(Horse(uma_image, player.rect.center))
+            if event.type == pg.KEYDOWN and event.key == pg.K_b:
+                open_shop(screen, clock, font, status)
+
 
         # 当たった卵と敵を消す
-        pg.sprite.groupcollide(eggs, enemies, True, True)
+        if pg.sprite.groupcollide(eggs, enemies, True, True):
+            status.coin += 20     # コイン獲得
 
         # こうかとんが背景の外へ出ないように位置を制限する
         player_rect.clamp_ip(world_rect)
 
         # 敵は消えるが、ビームは消えず貫通する
-        pg.sprite.groupcollide(beams, enemies, False, True)
+        if pg.sprite.groupcollide(beams, enemies, False, True):
+            status.coin += 20     # コイン獲得
 
         # 爆弾が一定距離まで進んだら爆発させる(画面外に出た爆弾は消す)
         for bomb_item in bombs.sprites():
             if bomb_item.reached_max_distance():
                 explosion = Explosion(bomb_item)
                 explosions.add(explosion)
-                pg.sprite.spritecollide(explosion, enemies, True)
+                if pg.sprite.spritecollide(explosion, enemies, True):
+                    status.coin += 20     # コイン獲得
                 bomb_item.kill()
             elif not SCREEN_RECT.colliderect(bomb_item.rect):
                 bomb_item.kill()
 
         # Uキーで呼び出した馬に触れた敵を消す
-        pg.sprite.groupcollide(horses, enemies, False, True)
+        if pg.sprite.groupcollide(horses, enemies, False, True):
+            status.coin += 20     # コイン獲得
 
         # 全てのスプライトを動かす
-        player.update(pg.key.get_pressed())
+        player.update(pg.key.get_pressed(), status)
         enemies.update(player.rect.center)
         eggs.update()
         beams.update()
@@ -430,6 +529,7 @@ def main() -> None:
         bombs.draw(screen)
         explosions.draw(screen)
         horses.draw(screen)
+        draw_ui(screen, font, status)
 
         pg.display.flip()
         clock.tick(60)
