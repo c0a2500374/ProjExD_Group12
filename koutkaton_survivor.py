@@ -231,7 +231,7 @@ def main() -> None:
             egg_rect.move_ip(round(velocity[0]), round(velocity[1]))
             hit = False
             for target in enemys:
-                if (abs(player_rect.centerx - target.rect.centerx) < 1 and abs(player_rect.centery - target.rect.centery) < 1 ):
+                if egg_rect.colliderect(target.rect):
                     target.damage(1)
                     hit = True
                     break
